@@ -1,0 +1,19 @@
+# Ejecutables
+*.exe
+*.out
+
+# Carpetas de compilación
+bin/
+dist/
+
+# Configuración del editor
+.vscode/
+.idea/
+
+# Archivos con variables de entorno o secretos
+.env
+.env.*
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
