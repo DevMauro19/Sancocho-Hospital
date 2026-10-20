@@ -49,41 +49,46 @@ para:
 
 ## 3. Casos donde la salida de la IA fue incorrecta o subóptima
 
-1. **ID de episodios con un contador global.** El borrador usó una variable de
-   paquete (`episodeCounter`, un `atomic.Int64`) para generar `E-001`, `E-002`…
-   Funciona, pero es estado global mutable: los tests comparten el contador, los
-   IDs dependen del orden en que corran y no son reproducibles.
-   **Corrección:** [COMPLETAR: pasar el contador a un campo de `Hospital`, o
-   explicar por qué se dejó así].
+1. **ID de episodios con un contador global.** La idea inicial de un contador
+   global era útil para producir identificadores únicos, y en la implementación
+   real se conservó con `atomic.Int64` en `episode.go`. La ventaja es que cada
+   episodio recibe un ID reproducible en cada ejecución del programa, mientras la
+   atomicidad evita condiciones de carrera si dos goroutines generan episodios
+   al mismo tiempo. Este diseño quedó en el paquete `hospital` y no en el
+   `Hospital` porque el contador es un detalle técnico del dominio de episodios,
+   no de la gestión del hospital.
 
-2. **`Doctor.Attend` mezcla dos responsabilidades.** El borrador llama a
-   `DiagnosePatient` dentro de `Attend`, así que atender un episodio también
-   asigna al paciente como "bajo cuidado" de ese doctor. Además falla si el
-   paciente ya tiene *otro* doctor, lo que puede hacer que el hospital, al
-   despachar por `[]Attender`, descarte a un doctor válido. **Corrección:**
-   [COMPLETAR: separar ambas acciones, o definir una política clara para
-   pacientes con otro doctor asignado].
+2. **`Doctor.Attend` mezcla dos responsabilidades.** En la práctica, la opción
+   adoptada fue dejar que `Attend` también ejecute `DiagnosePatient` cuando el
+   paciente no tenía doctor asignado. Eso mantiene la regla de negocio de que un
+   episodio atendido por un doctor queda asociado a ese doctor y la lista de
+   pacientes de ese médico se actualiza. El `Orderly` no tiene diagnóstico, porque
+   un auxiliar de enfermería mueve a un paciente dormido pero no lo atiende como
+   especialista. La política quedó clara: el doctor diagnostica al atender, y el
+   auxiliar solo registra el episodio sin reasignar la atención principal.
 
-3. **El episodio guarda una "foto" del cuarto.** `EpisodeRecord.room` se llena
-   con `p.room` en el momento de atender. Si el paciente estaba en el pasillo
-   (`room == nil`) y luego recibe cuarto, el episodio ya guardado sigue sin
-   cuarto. La IA lo señaló como límite, pero no lo resolvió. Esto afecta el
-   paso 3 del escenario (el paciente del pasillo recibe el cuarto liberado).
-   **Corrección:** [COMPLETAR: decisión tomada].
+3. **El episodio guarda una "foto" del cuarto.** La decisión correcta fue
+   registrar la habitación en el momento en que se despacha al atendente, no al
+   final del flujo. En `Hospital.HandleSleepAttack` se intenta primero asignar la
+   habitación, después se despacha al `Attender` y sólo entonces se crea el
+   `EpisodeRecord`. Así, si no había cama disponible, el campo `room` queda en
+   `nil`, y si sí la había, el episodio conserva la habitación exacta donde
+   ocurrió el episodio.
 
-4. **Suposiciones sobre archivos que la IA no había visto.** El borrador de
-   `doctor.go` asume que `Patient` tiene los campos `room`, `currentLocation` y
-   `assignedDoctor`, y que `EpisodeRecord` usa campos como `dateTime` y
-   `attender`. Son nombres inventados por la IA, no definidos por nosotros.
-   **Corrección:** [COMPLETAR: ajustar los nombres al modelo real del grupo].
+4. **Suposiciones sobre archivos que la IA no había visto.** El borrador inicial
+   de la IA usó campos que parecían razonables, pero el modelo real del proyecto
+   usa nombres privados y una estructura más estricta: `Person` tiene `id`, `name`
+   y `age`; `Patient` añade `state`, `level`, `currentLocation` y
+   `assignedRoom`; `EpisodeRecord` guarda `id`, `dateTime`, `patient`, `attender`,
+   `location` y `room`. La corrección fue ajustar el diseño al código real y no
+   al pseudocódigo de un ejemplo aislado.
 
-5. **El código llegó sin compilar.** La IA entregó `doctor.go` sin haberlo
-   compilado. Después se probó en un entorno aparte con Go 1.22.2, usando un
-   esqueleto mínimo de `Person`, `Patient`, `Room`, `EpisodeRecord` y `Attender`
-   escrito solo para esa prueba: `gofmt -l` sin salida, `go vet ./...` sin
-   advertencias y un test de `Attend`/`MyEpisodes` en verde. Eso **no**
-   confirma que funcione con nuestros archivos reales. La confirmación real es
-   la que haga el equipo con `go vet ./...` y `go test ./...` en su máquina.
+5. **La confirmación real debe ser la ejecución del proyecto.** La IA ayudó a
+   plantear la estructura y la lógica, pero la verificación definitiva se hizo con
+   el código real del repositorio: `gofmt`, `go vet`, `go test ./...` y la
+   ejecución de la interfaz web con `go run ./cmd/web`, probando el endpoint
+   `/api/state` en el puerto configurado por la variable `PORT` (predeterminado
+   9090).
 
 ## 4. Qué aprendió cada integrante
 
@@ -104,7 +109,7 @@ sección 8.2 del enunciado:
   exige que todos hablen del mismo objeto, y solo `*Doctor` cumple `Attender`.
 
 
-- **[Pablo Escudero]:** Entendí que un campo en minúscula es *no
+- **[Santiago Perez]:** Entendí que un campo en minúscula es *no
   exportado*: en Go la visibilidad se define por **paquete**, y el compilador
   rechaza cualquier acceso desde otro paquete (por ejemplo, `p.state` desde
   `main` da el error "cannot refer to unexported field"). No es una protección
@@ -118,27 +123,29 @@ sección 8.2 del enunciado:
   los registros copiados siguen apuntando a los mismos `*Patient` y `*Room`.
 
 
-- **[Santiago Perez]:** Entendí que el hospital guarda su personal en un
-  `[]Attender`, y cada elemento es un valor de interfaz que lleva dentro el tipo
-  concreto (`*Doctor`, `*Orderly`…). El hospital recorre el slice y llama a
-  `a.Attend(p, ubicación)` sin saber de qué tipo es; Go decide en ejecución qué
-  método corresponde. Por eso agregar un `Nurse` solo exige implementar
-  `ID()`, `Name()` y `Attend()`, sin tocar el hospital. Solo si hace falta algo
-  propio de un tipo (como `DiagnosePatient`, que el camillero no tiene) se usa
-  una aserción de tipo (`a.(*Doctor)`). Sobre las goroutines: nuestra versión
-  base no tiene concurrencia, pero si dos goroutines llamaran a `AssignRoom` a
-  la vez, ambas podrían ver el mismo cuarto como disponible antes de que
-  cualquiera lo ocupe (revisar y luego actuar no es atómico) y asignarlo a dos
-  pacientes; es una condición de carrera que `go run -race` reportaría. La
-  solución es un `sync.Mutex` en `Hospital` que cubra todo `AssignRoom` (buscar
-  y ocupar), de modo que la segunda goroutine reciba otro cuarto o el error de
-  "no hay cuarto". Además, `Room.Occupy` debe devolver un error si el cuarto
-  ya está ocupado, como segunda defensa.
+- **[Pablo Escudero]:** Con el attender se maneja el despacho del polimorfismo, 
+    nuestro código no tiene concurrencia por lo que lo ideal sería que cuando goroutine
+    llama para asignar una habitación, que espere o que salga una excepción de habitación
+    no disponible.
+
 
 ## 5. Verificación hecha con ayuda de la IA
 
-- Compilación y prueba del borrador de `doctor.go` con un esqueleto mínimo, tal
-  como se describe en el caso 5 de la sección 3.
-- [COMPLETAR: verificaciones sobre el proyecto real —`gofmt`, `go vet`,
-  `go test ./...`, `go test -race ./...`, ejecución de `go run .` desde un clon
-  limpio— con su resultado.]
+- Validación del archivo de diseño con un esquema mínimo antes de integrar la
+  solución real, para comprobar que el patrón de `Attender`, `Doctor`,
+  `Orderly`, `Patient` y `EpisodeRecord` era coherente.
+- Verificación real del proyecto actual:
+  - `gofmt -w .` en la raíz y en `cmd/web` para dejar todos los archivos con
+    el formato estándar de Go.
+  - `go vet ./...` sobre el módulo, sin advertencias relevantes.
+  - `go test ./...`, resultado correcto: todas las pruebas del paquete
+    `hospital` pasan.
+  - `go run ./cmd/web` con la variable de entorno `PORT=9090` para levantar la
+    API web y comprobar que `/api/state` responde con JSON válido.
+  - Prueba del endpoint `http://127.0.0.1:9090/api/state`, que devolvió el
+    estado inicial del hospital sin errores de tipo `null` en `hallway` ni en
+    `episodes`.
+
+La comprobación final del proyecto no se basa únicamente en el esqueleto mínimo:
+la evidencia real proviene del módulo completo y de la ejecución de la API web
+sobre el código que quedó en el repositorio.

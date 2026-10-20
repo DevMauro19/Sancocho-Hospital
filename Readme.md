@@ -121,6 +121,13 @@ costenitos/
 ├── Readme.md
 ├── AI_USAGE.md
 ├── main.go
+├── cmd/
+│   └── web/
+│       ├── main.go
+│       ├── server.go
+│       ├── scenario.go
+│       └── static/
+│           └── index.html
 ├── hospital/
 │   ├── hospital.go
 │   ├── patient.go
@@ -137,7 +144,11 @@ costenitos/
 - `go.mod`: define el módulo y la versión de Go.
 - `Readme.md`: contiene la documentación del proyecto.
 - `AI_USAGE.md`: documenta el uso de herramientas de inteligencia artificial.
-- `main.go`: construye el escenario de demostración y muestra los resultados.
+- `main.go`: construye el escenario de demostración y muestra los resultados del dominio en consola.
+- `cmd/web/main.go`: lanza la API web y sirve la interfaz estática.
+- `cmd/web/server.go`: implementa el backend REST del hospital y el estado en memoria.
+- `cmd/web/scenario.go`: archivo auxiliar del paquete web; se mantiene en el mismo módulo.
+- `cmd/web/static/index.html`: interfaz de usuario ligera para operar el hospital desde el navegador.
 - `hospital/hospital.go`: implementa la lógica principal del hospital.
 - `hospital/patient.go`: define el modelo y el comportamiento de los pacientes.
 - `hospital/doctor.go`: define los médicos y sus funcionalidades.
@@ -149,13 +160,38 @@ costenitos/
 
 ## ▶️ 9. Cómo ejecutar el proyecto
 
+### Consola
+
 Desde la carpeta raíz del repositorio, ejecuta:
 
 ```bash
 go run .
 ```
 
-Este comando ejecutará la función `main`, construirá el escenario de demostración y mostrará los resultados de las consultas.
+Este comando ejecuta el escenario de demostración de consola y muestra los resultados de las consultas requeridas.
+
+### API web
+
+También se incluye una interfaz ligera con API REST para interactuar desde el navegador:
+
+```bash
+go run ./cmd/web
+```
+
+La app usa el puerto `9090` por defecto. Si quieres cambiarlo, puedes definir la variable de entorno `PORT`:
+
+```bash
+$env:PORT = "9091"
+go run ./cmd/web
+```
+
+Luego abre:
+
+```text
+http://127.0.0.1:9090
+```
+
+o el puerto que hayas configurado.
 
 ## 🧪 10. Cómo ejecutar las pruebas
 
@@ -169,11 +205,9 @@ Este comando ejecutará las pruebas de todos los paquetes del módulo.
 
 ## 👥 11. Integrantes del equipo
 
-Reemplaza los siguientes marcadores con los nombres reales de los integrantes antes de entregar el repositorio.
-
-- 👨‍💻 Integrante 1: Carlos Mauricio Velasco
-- 👨‍💻 Integrante 2: Santiago Perez
-- 👨‍💻 Integrante 3: Pablo Escudero
+- 👨‍💻 Carlos Mauricio Velasco
+- 👨‍💻 Santiago Perez
+- 👨‍💻 Pablo Escudero
 
 ## 🧠 12. Decisiones de diseño
 

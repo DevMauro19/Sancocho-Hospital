@@ -52,6 +52,7 @@ type Person struct {
 
 func (p Person) ID() string   { return p.id }
 func (p Person) Name() string { return p.name }
+func (p Person) Age() int     { return p.age }
 
 type Patient struct {
 	Person
