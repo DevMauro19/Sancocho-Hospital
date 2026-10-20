@@ -18,15 +18,31 @@
         <div class="panel"><h2>Registrar ataque de sueño</h2><p>El sistema intenta asignar una cama y registra el episodio con el personal disponible.</p><div class="form-grid"><div><label for="attackPatient">Paciente despierto</label><select id="attackPatient"></select></div><div><label for="location">Ubicación del ataque</label><input id="location" placeholder="Ej. cafetería" value="cafetería"></div></div><div class="actions"><button onclick="attack()">Registrar ataque</button></div></div>
         <div class="panel"><h2>Despertar paciente</h2><p>Si estaba en una cama, la habitación queda disponible.</p><label for="wakePatient">Paciente dormido</label><select id="wakePatient"></select><div class="actions"><button onclick="wake()">Despertar</button></div></div>
         <div class="panel"><h2>Asignar habitación</h2><p>Asigna una cama libre a un paciente dormido que siga en el pasillo.</p><label for="assignPatient">Paciente en el pasillo</label><select id="assignPatient"></select><div class="actions"><button onclick="assign()">Asignar cama</button><button class="secondary" onclick="resetDemo()">Reiniciar escenario</button></div></div>
+        <div class="panel"><h2>Agregar paciente</h2><p>Crea un paciente nuevo sin depender del escenario base.</p><div class="form-grid"><div><label for="newPatientId">ID (opcional)</label><input id="newPatientId" placeholder="Se genera automático"></div><div><label for="newPatientName">Nombre</label><input id="newPatientName" placeholder="Ej. Sofía Ruiz"></div><div><label for="newPatientAge">Edad</label><input id="newPatientAge" type="number" min="0" value="30"></div><div><label for="newPatientSeverity">Severidad</label><select id="newPatientSeverity"><option value="Mild">Mild</option><option value="Moderate">Moderate</option><option value="Severe">Severe</option></select></div></div><div class="actions"><button onclick="addPatient()">Agregar paciente</button></div></div>
         <div class="panel"><h2>Informe de gravedad alta</h2><div class="table-wrap"><table><thead><tr><th>Paciente</th><th>Episodios</th></tr></thead><tbody id="severe"></tbody></table></div></div>
     </aside><section class="panel wide"><h2>Historial de episodios</h2><ul class="list" id="episodes"></ul></section></div>
     <div class="foot">Interfaz ligera servida por la biblioteca estándar de Go. Los datos viven en memoria y se reinician al reiniciar el escenario.</div>
 </main>
 <script>
     let current=null;
-    async function request(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error||'Ocurrió un error');return data}
+    async function request(path, method='GET', body=null) {
+        const options = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body !== null && body !== undefined && method !== 'GET') {
+            options.body = JSON.stringify(body);
+        }
+        const r = await fetch(path, options);
+        const text = await r.text();
+        let data = null;
+        if (text) {
+            try { data = JSON.parse(text); } catch (e) { throw new Error(text || 'Respuesta inválida del servidor'); }
+        }
+        if (!r.ok) {
+            throw new Error((data && data.error) || text || 'Ocurrió un error');
+        }
+        return data || {};
+    }
     function showMessage(msg,error=false){const n=document.getElementById('notice');n.textContent=msg;n.className='notice'+(error?' error':'');n.style.display='block';}
-    function options(id,items,placeholder){const el=document.getElementById(id),old=el.value;el.innerHTML='';if(!items.length){const o=document.createElement('option');o.value='';o.textContent='No hay pacientes disponibles';el.append(o);return}for(const p of items){const o=document.createElement('option');o.value=p.id;o.textContent=p.id+' · '+p.name;el.append(o)}if(items.some(p=>p.id===old))el.value=old;}
+    function options(id,items){const el=document.getElementById(id),old=el.value;el.innerHTML='';if(!items.length){const o=document.createElement('option');o.value='';o.textContent='No hay pacientes disponibles';el.append(o);return}for(const p of items){const o=document.createElement('option');o.value=p.id;o.textContent=p.id+' · '+p.name;el.append(o)}if(items.some(p=>p.id===old))el.value=old;}
     function pill(text,cls=''){return `<span class="pill ${cls}">${esc(text)}</span>`}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     function render(s){
         const data=s||{};
@@ -40,12 +56,20 @@
         document.getElementById('countRooms').textContent=rooms.filter(r=>r.state==='Available').length;
         document.getElementById('countHallway').textContent=hallway.length;
         document.getElementById('countSevere').textContent=severe.length;
-        document.getElementById('patients').innerHTML=patients.map(p=>`<tr><td><strong>${esc(p.name)}</strong><br><small>${esc(p.id)}</small></td><td>${p.age}</td><td>${pill(p.severity,p.severity==='Severe'?'severe':'')}</td><td>${pill(p.state,p.state==='Asleep in Hallway'?'sleep':p.state==='Asleep in Bed'?'bed':'')}</td><td>${p.room?'Habitación '+p.room:esc(p.location||'—')}</td></tr>`).join('');
+        document.getElementById('patients').innerHTML=patients.map(p=>`<tr><td><strong>${esc(p.name)}</strong><br><small>${esc(p.id)}</small></td><td>${p.age}</td><td>${pill(p.severity,p.severity==='Severe'?'severe':'')}</td><td>${pill(p.state,p.state==='Asleep in Hallway'?'sleep':p.state==='Asleep in Bed'?'bed':'')}</td><td>${p.room?'Habitación '+p.room:esc(p.location||'—')}<div class="actions"><button class="danger" onclick="deletePatient('${esc(p.id)}')">Eliminar</button></div></td></tr>`).join('');
         document.getElementById('rooms').innerHTML=rooms.map(r=>`<div class="room ${r.state==='Available'?'free':'full'}"><strong>🛏️ ${r.number}</strong><small>${esc(r.state)} · ${(Array.isArray(r.occupants)?r.occupants:[]).length}/${r.capacity} camas</small>${(Array.isArray(r.occupants)?r.occupants:[]).map(n=>`<div>${esc(n)}</div>`).join('')}</div>`).join('');
         document.getElementById('hallway').innerHTML=hallway.length?hallway.map(n=>`<li>${esc(n)}</li>`).join(''):'<li class="empty">No hay pacientes en el pasillo.</li>';
         const asleep=patients.filter(p=>p.state!=='Awake'),awake=patients.filter(p=>p.state==='Awake'),hall=patients.filter(p=>p.state==='Asleep in Hallway');options('attackPatient',awake);options('wakePatient',asleep);options('assignPatient',hall);
         document.getElementById('severe').innerHTML=severe.length?severe.map(p=>`<tr><td>${esc(p.name)} (${esc(p.id)})</td><td>${episodes.filter(e=>e.summary.includes(p.id)).length}</td></tr>`).join(''):'<tr><td colspan="2" class="empty">Sin pacientes graves.</td></tr>';
         document.getElementById('episodes').innerHTML=episodes.length?episodes.map(e=>`<li>${esc(e.summary)}</li>`).join(''):'<li class="empty">Aún no hay episodios registrados.</li>';
     }
-    async function refresh(){try{render(await request('/api/state'))}catch(e){showMessage(e.message,true)}}async function action(path,body){try{const d=await request(path,body);render(d.state);showMessage(d.message)}catch(e){showMessage(e.message,true)}}function attack(){const patientId=document.getElementById('attackPatient').value,location=document.getElementById('location').value.trim();if(!patientId||!location){showMessage('Selecciona un paciente y escribe la ubicación.',true);return}action('/api/attack',{patientId,location})}function wake(){const patientId=document.getElementById('wakePatient').value;if(patientId)action('/api/wake',{patientId})}function assign(){const patientId=document.getElementById('assignPatient').value;if(patientId)action('/api/assign',{patientId})}async function resetDemo(){try{const d=await request('/api/reset',{});render(d.state);showMessage(d.message)}catch(e){showMessage(e.message,true)}}refresh();
-</script></body></html>
+    async function refresh(){try{render(await request('/api/state','GET'))}catch(e){showMessage(e.message,true)}}
+    async function action(path,method,body){try{const d=await request(path,method,body);render(d.state);showMessage(d.message)}catch(e){showMessage(e.message,true)}}
+    function attack(){const patientId=document.getElementById('attackPatient').value,location=document.getElementById('location').value.trim();if(!patientId||!location){showMessage('Selecciona un paciente y escribe la ubicación.',true);return}action('/api/attack','POST',{patientId,location})}
+    function wake(){const patientId=document.getElementById('wakePatient').value;if(patientId)action('/api/wake','POST',{patientId})}
+    function assign(){const patientId=document.getElementById('assignPatient').value;if(patientId)action('/api/assign','POST',{patientId})}
+    async function addPatient(){const id=document.getElementById('newPatientId').value.trim();const name=document.getElementById('newPatientName').value.trim();const age=Number(document.getElementById('newPatientAge').value);const severity=document.getElementById('newPatientSeverity').value;if(!name){showMessage('Escribe el nombre del paciente.',true);return}try{const d=await request('/api/patients','POST',{id,name,age,severity});render(d.state);showMessage(d.message)}catch(e){showMessage(e.message,true)}}
+    async function deletePatient(patientId){try{const d=await request('/api/patients/'+encodeURIComponent(patientId),'DELETE',{patientId});render(d.state);showMessage(d.message)}catch(e){showMessage(e.message,true)}}
+    async function resetDemo(){try{const d=await request('/api/reset','POST',{});render(d.state);showMessage(d.message)}catch(e){showMessage(e.message,true)}}
+    refresh();
+    </script></body></html>

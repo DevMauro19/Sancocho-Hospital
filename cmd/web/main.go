@@ -16,6 +16,8 @@ func main() {
 	mux.HandleFunc("/api/attack", app.attackHandler)
 	mux.HandleFunc("/api/wake", app.wakeHandler)
 	mux.HandleFunc("/api/assign", app.assignHandler)
+	mux.HandleFunc("/api/patients", app.addPatientHandler)
+	mux.HandleFunc("/api/patients/", app.patientDetailHandler)
 	mux.HandleFunc("/api/reset", app.resetHandler)
 	mux.Handle("/", http.FileServer(http.Dir("cmd/web/static")))
 

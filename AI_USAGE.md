@@ -1,12 +1,8 @@
-# AI_USAGE.md — Hospital de los Costeños con Narcolepsia
+﻿# AI_USAGE.md — Hospital de los Costeños con Narcolepsia
 
 Este documento describe con honestidad cómo usamos IA en el proyecto, según lo
 pedido en la sección 8.1 del enunciado. Recoge **solo lo que ha pasado hasta
 ahora**; cada vez que usemos IA de nuevo, se agrega aquí.
-
-> Los textos entre `[COMPLETAR: ...]` los tiene que escribir el equipo con sus
-> propias palabras. No dejar ninguno al entregar: este archivo se contrasta con
-> lo que cada integrante diga en la defensa.
 
 ## 1. Herramientas usadas y para qué
 
@@ -27,6 +23,10 @@ para:
   `NewDoctor`, `DiagnosePatient`, `Attend`, `AttendSleepEmergency`,
   `MyEpisodes`) y un borrador de `SevereReport()`.
 - Redactar el `README.md` y este `AI_USAGE.md`.
+
+**ChatGPT**, como apoyo para revisar la estructura del proyecto,
+    diagnosticar problemas de Go y del servidor web, discutir decisiones
+    de implementación y preparar documentación y explicaciones técnicas.
 
 ## 2. Prompts decisivos
 
@@ -91,10 +91,6 @@ para:
    9090).
 
 ## 4. Qué aprendió cada integrante
-
-Cada uno lo escribe con sus palabras. Para que sea útil en la defensa, conviene
-que respondan (sin copiar la respuesta de la IA) a las preguntas de la
-sección 8.2 del enunciado:
 
 - **[Carlos Mauricio Velasco]:** Entendí qué cambia al embeber `Person` por valor o
   por puntero. Por valor, los datos viven dentro del `Doctor` y cada uno tiene su

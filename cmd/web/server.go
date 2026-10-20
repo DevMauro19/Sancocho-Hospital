@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 
 	"costenitos/hospital"
@@ -159,6 +161,39 @@ type actionRequest struct {
 	Location  string `json:"location"`
 }
 
+type customPatientRequest struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Age      int    `json:"age"`
+	Severity string `json:"severity"`
+}
+
+func parseSeverity(level string) (hospital.NarcolepsyLevel, error) {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "", "mild":
+		return hospital.Mild, nil
+	case "moderate":
+		return hospital.Moderate, nil
+	case "severe":
+		return hospital.Severe, nil
+	default:
+		return hospital.Mild, fmt.Errorf("severity %q is not valid: use Mild, Moderate or Severe", level)
+	}
+}
+
+func (a *app) nextPatientID() string {
+	used := map[string]bool{}
+	for _, p := range a.h.Patients() {
+		used[p.ID()] = true
+	}
+	for i := 1; ; i++ {
+		id := fmt.Sprintf("P-%03d", i)
+		if !used[id] {
+			return id
+		}
+	}
+}
+
 func decodeAction(w http.ResponseWriter, r *http.Request) (actionRequest, bool) {
 	var req actionRequest
 	if r.Method != "POST" {
@@ -171,6 +206,83 @@ func decodeAction(w http.ResponseWriter, r *http.Request) (actionRequest, bool) 
 	}
 	return req, true
 }
+func (a *app) addPatientHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req customPatientRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		writeError(w, http.StatusBadRequest, errors.New("name is required"))
+		return
+	}
+	if req.Age < 0 {
+		writeError(w, http.StatusBadRequest, errors.New("age must be zero or greater"))
+		return
+	}
+	level, err := parseSeverity(req.Severity)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		a.mu.Lock()
+		id = a.nextPatientID()
+		a.mu.Unlock()
+	}
+	if strings.TrimSpace(id) == "" {
+		writeError(w, http.StatusBadRequest, errors.New("patient id cannot be empty"))
+		return
+	}
+	p := hospital.NewPatient(id, req.Name, req.Age, level)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.patients[id] != nil {
+		writeError(w, http.StatusConflict, fmt.Errorf("patient %s already exists", id))
+		return
+	}
+	if err := a.h.AdmitPatient(p); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	a.patients[id] = p
+	writeJSON(w, map[string]any{"state": a.snapshot(), "message": "Paciente agregado: " + p.Name()})
+}
+
+func (a *app) deletePatientHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct { PatientID string `json:"patientId"` }
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if req.PatientID == "" {
+		writeError(w, http.StatusBadRequest, errors.New("patientId is required"))
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	p := a.patients[req.PatientID]
+	if p == nil {
+		writeError(w, http.StatusNotFound, errors.New("paciente no encontrado"))
+		return
+	}
+	if err := a.h.DischargePatient(p); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	delete(a.patients, req.PatientID)
+	writeJSON(w, map[string]any{"state": a.snapshot(), "message": "Paciente dado de alta: " + p.Name()})
+}
+
 func (a *app) attackHandler(w http.ResponseWriter, r *http.Request) {
 	req, ok := decodeAction(w, r)
 	if !ok {
@@ -232,6 +344,42 @@ func (a *app) assignHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"state": a.snapshot(), "message": "Habitación asignada: " + roomNumber(room.Number())})
 }
+
+func (a *app) patientDetailHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/patients/")
+	if id == "" || id == "/api/patients" {
+		writeError(w, http.StatusBadRequest, errors.New("patientId is required"))
+		return
+	}
+	payload := struct { PatientID string `json:"patientId"` }{}
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	if payload.PatientID != "" {
+		id = payload.PatientID
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	p := a.patients[id]
+	if p == nil {
+		writeError(w, http.StatusNotFound, errors.New("paciente no encontrado"))
+		return
+	}
+	if err := a.h.DischargePatient(p); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	delete(a.patients, id)
+	writeJSON(w, map[string]any{"state": a.snapshot(), "message": "Paciente dado de alta: " + p.Name()})
+}
+
 func roomNumber(n int) string { return fmt.Sprintf("%d", n) }
 func (a *app) resetHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {

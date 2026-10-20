@@ -120,6 +120,45 @@ func (h *Hospital) AdmitPatient(p *Patient) error {
 	return nil
 }
 
+// FindPatientByID devuelve el paciente admitido con ese ID, o nil si no existe.
+func (h *Hospital) FindPatientByID(id string) *Patient {
+	for _, p := range h.patients {
+		if p.ID() == id {
+			return p
+		}
+	}
+	return nil
+}
+
+// DischargePatient elimina un paciente admitido del hospital y libera la cama si
+// tuviera una. No borra el historial del hospital para conservar la trazabilidad.
+func (h *Hospital) DischargePatient(p *Patient) error {
+	if p == nil {
+		return errors.New("patient is nil")
+	}
+	if !h.hasPatient(p) {
+		return fmt.Errorf("patient %s is not admitted", p.ID())
+	}
+	if p.assignedRoom != nil {
+		if err := p.assignedRoom.Release(p); err != nil {
+			return err
+		}
+		p.assignedRoom = nil
+	}
+	p.state = Awake
+	p.currentLocation = ""
+	p.assignedDoctor = nil
+
+	remaining := make([]*Patient, 0, len(h.patients)-1)
+	for _, existing := range h.patients {
+		if existing != p {
+			remaining = append(remaining, existing)
+		}
+	}
+	h.patients = remaining
+	return nil
+}
+
 // hasPatient indica si el paciente fue admitido (compara punteros).
 func (h *Hospital) hasPatient(p *Patient) bool {
 	for _, existing := range h.patients {
