@@ -109,18 +109,24 @@ sección 8.2 del enunciado:
   exige que todos hablen del mismo objeto, y solo `*Doctor` cumple `Attender`.
 
 
-- **[Santiago Perez]:** Entendí que un campo en minúscula es *no
-  exportado*: en Go la visibilidad se define por **paquete**, y el compilador
-  rechaza cualquier acceso desde otro paquete (por ejemplo, `p.state` desde
-  `main` da el error "cannot refer to unexported field"). No es una protección
-  en ejecución, y tampoco es por tipo: cualquier archivo del paquete `hospital`
-  sí puede tocar esos campos, por eso la disciplina es modificarlos solo a
-  través de métodos que mantengan coherente el estado (por ejemplo, que
-  `state` y `room` del paciente cambien juntos). `MyEpisodes` devuelve una copia
-  porque un slice es una referencia a un arreglo interno: si devolviéramos
-  `d.episodes`, el código externo podría sobrescribir sus elementos y alterar el
-  historial del doctor. La copia (`make` + `copy`) lo evita, aunque es superficial:
-  los registros copiados siguen apuntando a los mismos `*Patient` y `*Room`.
+- **[Santiago Perez]:** Me encargué de `hospital/room.go`. `Room` representa una
+  habitación con número, capacidad, estado (`RoomState`) y un slice
+  `occupants []*Patient`. Todos los campos son privados, así que desde afuera
+  solo se usa a través de sus métodos: `NewRoom` crea el cuarto y rechaza una
+  capacidad menor o igual a 0; `IsAvailable` compara `len(occupants)` con la
+  capacidad; `Occupy` agrega al paciente con `append` si hay cama libre y no
+  está repetido; `Release` lo saca con `append(occupants[:i], occupants[i+1:]...)`.
+  Después de cada cambio se llama a `updateState`, que es el único lugar donde
+  cambia el estado, para que el cuarto nunca quede "Occupied" con camas libres.
+  `Room` solo maneja el cuarto: el estado del paciente lo cambia el `Hospital`.
+  Con esto aprendí cómo funcionan los slices en Go: por dentro apuntan a un
+  arreglo, por eso `Occupants()` devuelve una copia con `copy` y así nadie puede
+  modificar el slice interno desde afuera. También aprendí a usar `iota` para
+  definir estados como constantes tipadas (`Available`, `Occupied`) con su
+  método `String()` en vez de usar strings sueltos. Además repasé cómo funcionan
+  los arreglos de punteros: como `occupants` guarda `*Patient`, el cuarto apunta
+  a los mismos pacientes del hospital y no a copias, y por eso `contains` y
+  `Release` pueden encontrar al paciente comparando punteros.
 
 
 - **[Pablo Escudero]:** Con el attender se maneja el despacho del polimorfismo, 
