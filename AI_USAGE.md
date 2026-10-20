@@ -10,10 +10,9 @@ ahora**; cada vez que usemos IA de nuevo, se agrega aquí.
 
 ## 1. Herramientas usadas y para qué
 
-**Integrantes:** [COMPLETAR: nombre 1], [COMPLETAR: nombre 2], [COMPLETAR: nombre 3]
+**Integrantes:** Carlos Mauricio Velasco, Pablo Escudero, Santiago Perez
 
-**Claude (Anthropic), modelo Sonnet 5.5** [COMPLETAR: confirmar el modelo y quién
-tuvo la sesión], en una sesión de chat, usado como tutor y asistente de diseño
+**Claude (Anthropic), modelo Sonnet 5.5** , en varias sesiones de chat, usado como tutor y asistente de diseño
 para:
 
 - Leer el enunciado y proponer una **ruta de trabajo**: preparar el repositorio,
@@ -28,10 +27,6 @@ para:
   `NewDoctor`, `DiagnosePatient`, `Attend`, `AttendSleepEmergency`,
   `MyEpisodes`) y un borrador de `SevereReport()`.
 - Redactar el `README.md` y este `AI_USAGE.md`.
-
-**Qué NO hizo la IA (hasta ahora):** `Hospital`, `Room`, `Orderly`, los tests,
-`main.go` y la interfaz gráfica. [COMPLETAR: si alguien usó otra herramienta
-—Copilot, ChatGPT, etc.— indicar cuál y para qué archivos.]
 
 ## 2. Prompts decisivos
 
@@ -96,14 +91,49 @@ Cada uno lo escribe con sus palabras. Para que sea útil en la defensa, conviene
 que respondan (sin copiar la respuesta de la IA) a las preguntas de la
 sección 8.2 del enunciado:
 
-- **[COMPLETAR: nombre 1]:** [COMPLETAR: ¿qué cambia si `Person` se embebe por
-  valor o por puntero?, ¿por qué los métodos de `Doctor` usan receptor puntero?]
-- **[COMPLETAR: nombre 2]:** [COMPLETAR: ¿por qué los campos van en minúscula y
-  qué impide exactamente que otro paquete los toque?, ¿por qué `MyEpisodes`
-  devuelve una copia?]
-- **[COMPLETAR: nombre 3]:** [COMPLETAR: ¿cómo se usa el `[]Attender` sin saber
-  el tipo concreto?, ¿qué pasa si dos goroutines asignan el mismo cuarto a la
-  vez?]
+- **[Carlos Mauricio Velasco]:** Entendí qué cambia al embeber `Person` por valor o
+  por puntero. Por valor, los datos viven dentro del `Doctor` y cada uno tiene su
+  propia identidad; por puntero, el struct solo guarda una dirección, que queda
+  en `nil` si no se inicializa (y `d.ID()` falla en ejecución, no al compilar), y
+  dos copias del struct comparten el mismo `Person`. Elegimos valor porque un
+  paciente y un doctor son personas distintas. También entendí por qué los
+  métodos de `Doctor` usan receptor puntero: `Attend` y `DiagnosePatient` hacen
+  `append` sobre `episodes` y `patients`, y con receptor por valor trabajarían
+  sobre una copia y esos cambios se perderían sin ningún error de compilación.
+  Además, `Patient.assignedDoctor` es un `*Doctor` y se compara con `!=`, lo que
+  exige que todos hablen del mismo objeto, y solo `*Doctor` cumple `Attender`.
+
+
+- **[Pablo Escudero]:** Entendí que un campo en minúscula es *no
+  exportado*: en Go la visibilidad se define por **paquete**, y el compilador
+  rechaza cualquier acceso desde otro paquete (por ejemplo, `p.state` desde
+  `main` da el error "cannot refer to unexported field"). No es una protección
+  en ejecución, y tampoco es por tipo: cualquier archivo del paquete `hospital`
+  sí puede tocar esos campos, por eso la disciplina es modificarlos solo a
+  través de métodos que mantengan coherente el estado (por ejemplo, que
+  `state` y `room` del paciente cambien juntos). `MyEpisodes` devuelve una copia
+  porque un slice es una referencia a un arreglo interno: si devolviéramos
+  `d.episodes`, el código externo podría sobrescribir sus elementos y alterar el
+  historial del doctor. La copia (`make` + `copy`) lo evita, aunque es superficial:
+  los registros copiados siguen apuntando a los mismos `*Patient` y `*Room`.
+
+
+- **[Santiago Perez]:** Entendí que el hospital guarda su personal en un
+  `[]Attender`, y cada elemento es un valor de interfaz que lleva dentro el tipo
+  concreto (`*Doctor`, `*Orderly`…). El hospital recorre el slice y llama a
+  `a.Attend(p, ubicación)` sin saber de qué tipo es; Go decide en ejecución qué
+  método corresponde. Por eso agregar un `Nurse` solo exige implementar
+  `ID()`, `Name()` y `Attend()`, sin tocar el hospital. Solo si hace falta algo
+  propio de un tipo (como `DiagnosePatient`, que el camillero no tiene) se usa
+  una aserción de tipo (`a.(*Doctor)`). Sobre las goroutines: nuestra versión
+  base no tiene concurrencia, pero si dos goroutines llamaran a `AssignRoom` a
+  la vez, ambas podrían ver el mismo cuarto como disponible antes de que
+  cualquiera lo ocupe (revisar y luego actuar no es atómico) y asignarlo a dos
+  pacientes; es una condición de carrera que `go run -race` reportaría. La
+  solución es un `sync.Mutex` en `Hospital` que cubra todo `AssignRoom` (buscar
+  y ocupar), de modo que la segunda goroutine reciba otro cuarto o el error de
+  "no hay cuarto". Además, `Room.Occupy` debe devolver un error si el cuarto
+  ya está ocupado, como segunda defensa.
 
 ## 5. Verificación hecha con ayuda de la IA
 

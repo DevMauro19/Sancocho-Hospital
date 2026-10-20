@@ -116,32 +116,36 @@ Se pueden implementar funcionalidades opcionales para obtener puntos adicionales
 El repositorio debe tener la siguiente estructura:
 
 ```text
-costenos-narcolepsia/
+costenitos/
 ├── go.mod
-├── README.md
+├── Readme.md
 ├── AI_USAGE.md
+├── main.go
 ├── hospital/
 │   ├── hospital.go
 │   ├── patient.go
 │   ├── doctor.go
+│   ├── orderly.go
 │   ├── room.go
 │   ├── episode.go
-│   └── hospital_test.go
-└── main.go
+│   ├── hospital_test.go
+│   └── orderly_test.go
 ```
 
 ### 📁 Descripción de los archivos
 
 - `go.mod`: define el módulo y la versión de Go.
-- `README.md`: contiene la documentación del proyecto.
+- `Readme.md`: contiene la documentación del proyecto.
 - `AI_USAGE.md`: documenta el uso de herramientas de inteligencia artificial.
+- `main.go`: construye el escenario de demostración y muestra los resultados.
 - `hospital/hospital.go`: implementa la lógica principal del hospital.
 - `hospital/patient.go`: define el modelo y el comportamiento de los pacientes.
 - `hospital/doctor.go`: define los médicos y sus funcionalidades.
+- `hospital/orderly.go`: define el personal auxiliar de enfermería y su comportamiento.
 - `hospital/room.go`: gestiona las habitaciones.
 - `hospital/episode.go`: representa los registros de episodios de sueño.
-- `hospital/hospital_test.go`: contiene las pruebas automatizadas.
-- `main.go`: construye el escenario y muestra los resultados.
+- `hospital/hospital_test.go`: contiene las pruebas automatizadas del hospital.
+- `hospital/orderly_test.go`: verifica el comportamiento del personal auxiliar.
 
 ## ▶️ 9. Cómo ejecutar el proyecto
 
